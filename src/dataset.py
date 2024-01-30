@@ -156,6 +156,7 @@ class baseTestDataset(Dataset):
         
         return {
             "input_ids": inputs["input_ids"].squeeze(),
+            "attention_mask": inputs["attention_mask"].squeeze(),
             "uuid": uuid
         }
 
@@ -163,13 +164,20 @@ class baseTestDataset(Dataset):
 
         input_ids = [item["input_ids"] for item in batch]
         uuid = [item["uuid"] for item in batch]
-
+        attention_mask = [item["attention_mask"] for item in batch]
+        labels = [item["input_ids"] for item in batch] #dummy
+        
         # Padding
         input_ids = torch.nn.utils.rnn.pad_sequence(input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id)
+        attention_mask = torch.nn.utils.rnn.pad_sequence(attention_mask, batch_first=True, padding_value=0)
+        labels = torch.nn.utils.rnn.pad_sequence(labels, batch_first=True, padding_value=self.tokenizer.pad_token_id)
+
         
         return {
             "uuid": uuid,
+            "attention_mask": attention_mask,
             "input_ids": input_ids,
+            "labels": labels
         }
 
 
@@ -184,11 +192,14 @@ def preprocess(data:List[Dict], tokenizer):
     for temp in data:
                 
         temp['documents'] = [remove_emoji(doc) for doc in temp["documents"]]
+        
+        """
         try:
             temp['documents'] = sort_and_remain_5_documents(temp['documents'],temp['question'])
         except:
             pass
             #when there is no documents
+        """
         
         new_data.append(temp)
     

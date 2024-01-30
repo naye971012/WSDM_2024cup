@@ -12,6 +12,8 @@ import evaluate
 import random
 import json
 
+from src.measure import common_measure #공통 평가지표
+
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def train(args, 
@@ -95,7 +97,7 @@ def validation(args,
             
             answer_list.extend(tokenizer.batch_decode(torch.argmax(outputs.logits,dim=-1), skip_special_tokens=True))
             pred_list.extend(tokenizer.batch_decode(labels, skip_special_tokens=True))
-         
+            
     validation_loss /= len(valid_loader)
     
     """ #only used when see validation in txt file (pipe)
@@ -110,9 +112,12 @@ def validation(args,
     results = rouge.compute(predictions=pred_list,
                              references=answer_list) #-> return Dict
     results['loss'] = validation_loss
-        
+    
+    common_results = common_measure(pred_list, answer_list)
+    
     if args.is_logging:
         wandb.log(results)
+        wandb.log(common_results) #공통지표
                 
         selected_indices = random.sample(range(len(pred_list)), k=10)
         selected_items_pred = [pred_list[i] for i in selected_indices]
@@ -146,5 +151,33 @@ def inference(args, model, tokenizer, test_loader):
             
             #break
         
+    with open("data/submission.json", "w", encoding="utf-8") as output_file:
+        json.dump(predictions, output_file, ensure_ascii=False, indent=2)
+
+
+def inference2(args,model,tokenizer,test_loader):
+    
+    model.to(DEVICE)
+    predictions = []
+    
+    with torch.no_grad():
+        for batch in tqdm(test_loader, desc=f"Inference"):
+            input_ids = batch["input_ids"].to(DEVICE)
+            attention_mask = batch["attention_mask"].to(DEVICE)
+            uuid = batch['uuid']
+            labels = batch["labels"].to(DEVICE) #dummy value
+            
+            outputs = model(input_ids = input_ids, attention_mask=attention_mask, labels=labels)
+            
+            batch_prediction_list = tokenizer.batch_decode(torch.argmax(outputs.logits,dim=-1), skip_special_tokens=True)
+            
+            for i in range(len(batch_prediction_list)):
+                #generated_text = tokenizer.decode(outputs[i], skip_special_tokens=True)
+                #print( tokenizer.decode(outputs[i], skip_special_tokens=False))
+                predictions.append({"uuid": uuid[i], "prediction": batch_prediction_list[i]})
+                #print(uuid[i])
+                #print(batch_prediction_list[i])
+                #print("================================")
+    
     with open("data/submission.json", "w", encoding="utf-8") as output_file:
         json.dump(predictions, output_file, ensure_ascii=False, indent=2)

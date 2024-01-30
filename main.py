@@ -24,7 +24,7 @@ print(current_path)
 
 from src.utils import set_global_seed, check_gpu
 from src.dataset import get_loaders
-from src.trainer import train, validation, inference
+from src.trainer import train, validation, inference, inference2
 from src.model import baseModel
 
 def get_args():
@@ -90,7 +90,8 @@ def main(args):
         model = T5ForConditionalGeneration.from_pretrained(f"model/{args.save_name}")
         tokenizer = T5Tokenizer.from_pretrained(f"model/{args.save_name}")
         #validation(args,0,model,tokenizer,valid_loader)
-        inference(args,model,tokenizer,test_loader)
+        #inference(args,model,tokenizer,test_loader)
+        inference2(args,model,tokenizer,test_loader)
 
 
 if __name__=="__main__":
