@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader
 import wandb
 import evaluate
 import random
+import json
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -30,7 +31,7 @@ def train(args,
         
         progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}", dynamic_ncols=True)
 
-        for batch in progress_bar:
+        for i, batch in enumerate(progress_bar):
             input_ids = batch["input_ids"].to(DEVICE)
             attention_mask = batch["attention_mask"].to(DEVICE)
             labels = batch["labels"].to(DEVICE)
@@ -43,7 +44,7 @@ def train(args,
             optimizer.step()
             
             progress_bar.set_postfix({"loss": loss.item()})
-            if args.is_logging:
+            if i%20==19 and args.is_logging:
                 wandb.log({"train_loss": loss})
 
         valid_results = validation(args,epoch,model,tokenizer,valid_loader)
@@ -75,6 +76,7 @@ def validation(args,
     validation step
     return validation loss(type:float)
     """
+    model.to(DEVICE)
     rouge = evaluate.load('rouge')
      
     # Validation
@@ -96,6 +98,14 @@ def validation(args,
          
     validation_loss /= len(valid_loader)
     
+    """ #only used when see validation in txt file (pipe)
+    for step, (i,j) in enumerate(zip(answer_list,pred_list)):
+        print(f"{step}: =========================")
+        print(i)
+        print(j)
+        print("==================================")
+    """
+    
     #compute rouge score and merge loss in dictionary
     results = rouge.compute(predictions=pred_list,
                              references=answer_list) #-> return Dict
@@ -107,10 +117,34 @@ def validation(args,
         selected_indices = random.sample(range(len(pred_list)), k=10)
         selected_items_pred = [pred_list[i] for i in selected_indices]
         selected_items_answer = [answer_list[i] for i in selected_indices]
-        wandb.log({"valid_prediction_example": selected_items_pred})
-        wandb.log({"valid_label_example": selected_items_answer})
+        
+        for i in range(10):
+            wandb.log({"valid_prediction_example": selected_items_pred[i]})
+            wandb.log({"valid_label_example": selected_items_answer[i]})
     
     return results
             
             
+
+def inference(args, model, tokenizer, test_loader):
+    
+    model.to(DEVICE)
+    
+    predictions = []
+    with torch.no_grad():
+        for batch in tqdm(test_loader, desc=f"Inference..."):
+            input_ids = batch["input_ids"].to(DEVICE)
+            uuid = batch['uuid']
             
+            outputs = model.generate(input_ids, max_length=200) #num_beams=10, length_penalty=2.0, early_stopping=True
+
+            # 생성된 결과를 토큰에서 텍스트로 디코딩하고, 각 배치 결과를 저장
+            for i in range(input_ids.size(0)):
+                generated_text = tokenizer.decode(outputs[i], skip_special_tokens=True)
+                #print( tokenizer.decode(outputs[i], skip_special_tokens=False))
+                predictions.append({"uuid": uuid[i], "prediction": generated_text})
+            
+            #break
+        
+    with open("data/submission.json", "w", encoding="utf-8") as output_file:
+        json.dump(predictions, output_file, ensure_ascii=False, indent=2)
