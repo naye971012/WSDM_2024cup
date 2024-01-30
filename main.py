@@ -12,7 +12,7 @@ from transformers import AutoModel, AutoTokenizer, T5ForConditionalGeneration, T
 import logging
 
 ### Remove warning message ###
-logging.getLogger("transformers.tokenization_utils_base").setLevel(logging.ERROR)
+logging.getLogger().setLevel(logging.ERROR)
 
 ############## this block is just for import moudles ######
 current_path = os.path.dirname(os.path.realpath(__file__))
@@ -22,10 +22,10 @@ print(current_path)
 #sys.path.append(grand_path)
 ###########################################################
 
-from src.utils import set_global_seed
+from src.utils import set_global_seed, check_gpu
 from src.dataset import get_loaders
-from src.trainer import train
-
+from src.trainer import train, validation
+from src.model import baseModel
 
 def get_args():
     # ArgumentParser 객체를 생성합니다.
@@ -33,7 +33,7 @@ def get_args():
 
     #dealing datapath
     parser.add_argument('--raw_train_path', type=str, default="data/release_train_data.json", help='original data path')
-    parser.add_argument('--raw_test_path', type=str, default="data/release_train_data.json", help='original data path')
+    parser.add_argument('--raw_test_path', type=str, default="data/phase_1_test.json", help='original data path')
 
 
     #dealing training arguments
@@ -51,8 +51,14 @@ def get_args():
     parser.add_argument('--is_train', type=bool, default=True, help='train or not')
     parser.add_argument('--is_test', type=bool, default=False, help='inference or not')
     parser.add_argument('--is_logging', type=bool, default=False, help='using wandb')
-    parser.add_argument('--save_best_model', type=bool, default=False, help='is save model')
     
+    
+    #save model
+    parser.add_argument('--save_best_model', type=bool, default=False, help='is save model')
+    parser.add_argument('--best_model_metric', type=str, default="loss", help='loss,rouge1,rouge2,rougeL,rougeLsum,')    
+    parser.add_argument('--save_name', type=str, default="baseline_model", help='save name')
+
+
 
     #wandb logging arguments
     parser.add_argument('--project_name', type=str, default="wsdm2024", help='project name of wandb')
@@ -70,26 +76,20 @@ def get_args():
 def main(args):
     set_global_seed(args.seed)
 
-    tokenizer = T5Tokenizer.from_pretrained(args.model_name,
-                                              device_map = "balanced",  
-                                              max_memory={0: "20GB", 1: "20GB"})
-    
-    
-    model = T5ForConditionalGeneration.from_pretrained(args.model_name, 
-                                      device_map = "balanced",  
-                                      max_memory={0: "20GB", 1: "20GB"})
+    model, tokenizer = baseModel(args.model_name).get_model_and_tokenizer()
 
     print(f"model size: {model.num_parameters(only_trainable=False) / 1e6}M ")
     print(f"trainable params: {model.num_parameters(only_trainable=True) / 1e6}M ")    
     
     train_loader, valid_loader, test_loader = get_loaders(args, tokenizer)
     
-    train(args,model,tokenizer,train_loader,valid_loader)
-
+    #train(args,model,tokenizer,train_loader,valid_loader)
+    validation(args,0,model,tokenizer,valid_loader)
 
 if __name__=="__main__":
     
     print(f"checking gpu... {torch.cuda.is_available()}")
+    check_gpu()
     
     args = get_args()
     

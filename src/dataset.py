@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from transformers import T5ForConditionalGeneration, T5Tokenizer, AdamW, AutoTokenizer
 import json
-from typing import Tuple, List
+from typing import Tuple, List, Dict
 
 from src.utils import get_data, split_train_validation_data
 
@@ -20,14 +20,14 @@ def get_loaders(args, tokenizer):
     ## -> Datatype = List[Dict]
     
     ##### need to preprocessing #####
-    train_data = raw_train_data
-    valid_data = raw_valid_data
-    test_data = raw_test
+    train_data = preprocess(raw_train_data)
+    valid_data = preprocess(raw_valid_data)
+    test_data = preprocess(raw_test)
     #################################
     
-    train_dataset = CustomDataset(args, train_data, tokenizer=tokenizer)
-    valid_dataset = CustomDataset(args, valid_data, tokenizer=tokenizer)
-    test_dataset = CustomDataset(args, test_data, tokenizer=tokenizer)
+    train_dataset = baseDataset(args, train_data, tokenizer=tokenizer)
+    valid_dataset = baseDataset(args, valid_data, tokenizer=tokenizer)
+    test_dataset = baseDataset(args, test_data, tokenizer=tokenizer)
 
 
     train_loader = DataLoader(train_dataset,args.batch_size, shuffle=True, collate_fn=train_dataset.collate_fn)
@@ -37,23 +37,49 @@ def get_loaders(args, tokenizer):
     return train_loader, valid_loader, test_loader
 
 
-class CustomDataset(Dataset):
+class baseDataset(Dataset):
+    """
+    just concat Question and Document
+    do not use history data
+    
+    implemented based on T5
+    """
     def __init__(self, 
                  args,
                  data, 
-                 tokenizer:AutoTokenizer):
+                 tokenizer:T5Tokenizer):
         
         self.args = args
         self.data = data
         self.tokenizer = tokenizer
 
+        self.myvocab=dict()
+        self.dealing_special_tokens()
+        
+    def dealing_special_tokens(self):
+        #self.tokenizer에 있는 extra_id를 이용하여 q_start, q_end 등의 token을 만듦.
+                
+        self.myvocab = {
+            "<question>" : "<extra_id_0>",
+            "</question>" : "<extra_id_1>",
+            "<document>" : "<extra_id_2>",
+            "</document>" : "<extra_id_3>",
+            "<answer>" : "<extra_id_4>",
+            "</answer>" : "<extra_id_5>",
+        }
+        
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
         entry = self.data[idx]
-        input_text = f"question: {entry['question']} context: {' '.join(entry['documents'])}"
-        target_text = entry["answer"]
+        
+        #input_text = f"question: {entry['question']} context: {' '.join(entry['documents'])}"
+        
+        input_text = self.myvocab['<question>'] + entry['question'] + self.myvocab['</question>'] \
+                + self.myvocab['<document>'] + ' '.join(entry['documents']) + self.myvocab['</document>'] \
+
+        target_text = self.myvocab['<answer>'] + entry["answer"] + self.myvocab['</answer>']
 
         inputs = self.tokenizer(input_text, return_tensors="pt", max_length=1024, truncation=True)
         targets = self.tokenizer(target_text, return_tensors="pt", max_length=1024, truncation=True)
@@ -80,3 +106,7 @@ class CustomDataset(Dataset):
             "attention_mask": attention_mask,
             "labels": labels
         }
+
+
+def preprocess(data:List[Dict]):
+    return data

@@ -3,12 +3,13 @@ import torch.nn as nn
 import numpy as np
 import pandas as pd
 import transformers
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoTokenizer, AutoModel, T5Tokenizer, T5ForConditionalGeneration
 from tqdm import tqdm
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 import wandb
-
+import evaluate
+import random
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -41,22 +42,21 @@ def train(args,
             loss.backward()
             optimizer.step()
             
-            
             progress_bar.set_postfix({"loss": loss.item()})
             if args.is_logging:
                 wandb.log({"train_loss": loss})
 
-        valid_loss = validation(args,epoch,model,valid_loader)
+        valid_results = validation(args,epoch,model,tokenizer,valid_loader)
 
         
         if args.save_best_model:
-            # Early Stopping 및 모델 저장
-            if valid_loss < best_loss:
-                best_loss = valid_loss
+            # Early Stopping 및 모델 저장 / 원하는 metric으로
+            if valid_results[args.best_model_metric] < best_loss:
+                best_loss = valid_results[args.best_model_metric]
                 counter = 0
                 # Save the model
-                model.save_pretrained(f"{args.save_name}")
-                tokenizer.save_pretrained(f"{args.save_name}")
+                model.save_pretrained(f"model/{args.save_name}")
+                tokenizer.save_pretrained(f"model/{args.save_name}")
             else:
                 counter += 1
                 print(f"not improvement for {counter} steps...")
@@ -68,13 +68,19 @@ def train(args,
 
 def validation(args,
                epoch:int,
-               model:nn.Module, 
+               model:T5ForConditionalGeneration, 
+               tokenizer:T5Tokenizer,
                valid_loader:DataLoader):
     """
     validation step
     return validation loss(type:float)
     """
+    rouge = evaluate.load('rouge')
+     
     # Validation
+    answer_list = []
+    pred_list = []
+    
     validation_loss = 0.0
     with torch.no_grad():
         for batch in tqdm(valid_loader, desc=f"Validation - Epoch {epoch+1}"):
@@ -84,13 +90,27 @@ def validation(args,
 
             outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
             validation_loss += outputs.loss.sum().item()
-
+            
+            answer_list.extend(tokenizer.batch_decode(torch.argmax(outputs.logits,dim=-1), skip_special_tokens=True))
+            pred_list.extend(tokenizer.batch_decode(labels, skip_special_tokens=True))
+         
     validation_loss /= len(valid_loader)
     
+    #compute rouge score and merge loss in dictionary
+    results = rouge.compute(predictions=pred_list,
+                             references=answer_list) #-> return Dict
+    results['loss'] = validation_loss
+        
     if args.is_logging:
-                wandb.log({"valid_loss": validation_loss})
+        wandb.log(results)
                 
-    return validation_loss
+        selected_indices = random.sample(range(len(pred_list)), k=10)
+        selected_items_pred = [pred_list[i] for i in selected_indices]
+        selected_items_answer = [answer_list[i] for i in selected_indices]
+        wandb.log({"valid_prediction_example": selected_items_pred})
+        wandb.log({"valid_label_example": selected_items_answer})
+    
+    return results
             
             
             

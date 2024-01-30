@@ -1,6 +1,7 @@
 import json
 import random
 import numpy as np
+import torch
 
 def get_data(args):
     """
@@ -32,3 +33,16 @@ def split_train_validation_data(args, data):
 def set_global_seed(seed:int):
     random.seed(seed)
     np.random.seed(seed)
+
+
+def check_gpu():
+
+    num_cuda_devices = torch.cuda.device_count()
+
+    if num_cuda_devices > 0:
+        for i in range(num_cuda_devices):
+            device = torch.cuda.get_device_name(i)
+            memory_info = torch.cuda.get_device_properties(i).total_memory / 1e9  # GB로 변환
+            print(f"GPU {i + 1}: {device} - Available: {memory_info:.2f} GB")
+    else:
+        print("No Gpu Available")
