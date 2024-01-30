@@ -1,1 +1,5 @@
 *.json
+.vscode/*
+data/*
+__pycache__/*
+dummy_files/*
