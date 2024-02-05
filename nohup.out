@@ -1,0 +1,7 @@
+wandb: Currently logged in as: naye971012. Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.16.2
+wandb: Run data is saved locally in /home/tako/jonghyo/wandb/run-20240205_170015-zwon548m
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run longt5-large-tglobal-without-lora
+wandb: ⭐️ View project at https://wandb.ai/naye971012/wsdm2024
+wandb: 🚀 View run at https://wandb.ai/naye971012/wsdm2024/runs/zwon548m
